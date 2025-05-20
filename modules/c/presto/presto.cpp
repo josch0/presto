@@ -47,7 +47,7 @@ void presto_debug(const char *fmt, ...) {
 #endif
 
 typedef struct _Presto_led_values_t {
-    uint32_t r, g, b;
+    uint32_t h, s, v;
 } _Presto_led_values_t;
 
 /***** Variables Struct *****/
@@ -59,8 +59,6 @@ typedef struct _Presto_obj_t {
     bool using_palette;
     volatile bool exit_core1;
 
-    // Automatic ambient backlight control
-    volatile bool auto_ambient_leds;
     WS2812* ws2812;
     _Presto_led_values_t led_values[7];
 } _Presto_obj_t;
@@ -95,66 +93,18 @@ static void __no_inline_not_in_flash_func(update_backlight_leds)() {
     };
 
     while (!presto_obj->exit_core1) {
-        if (presto_obj->auto_ambient_leds) {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                uint32_t r = presto_obj->led_values[i].r;
-                uint32_t g = presto_obj->led_values[i].g;
-                uint32_t b = presto_obj->led_values[i].b;
-
-                if (presto_obj->using_palette) {
-                    for (int y = 0; y < SAMPLE_RANGE; ++y) {
-                        uint8_t* ptr = (uint8_t*)presto_buffer;
-                        ptr += (led_sample_locations[i].y + y) * presto_obj->width + led_sample_locations[i].x;
-                        for (int x = 0; x < SAMPLE_RANGE; ++x) {
-                            uint16_t sample = presto_obj->presto->get_encoded_palette_entry(*ptr++) >> 16;
-                            r += (sample >> 8) & 0xF8;
-                            g += (sample >> 3) & 0xFC;
-                            b += (sample << 3) & 0xF8;
-                        }
-                    }
-                }
-                else {
-                    for (int y = 0; y < SAMPLE_RANGE; ++y) {
-                        uint16_t* ptr = &presto_buffer[(led_sample_locations[i].y + y) * presto_obj->width + led_sample_locations[i].x];
-                        for (int x = 0; x < SAMPLE_RANGE; ++x) {
-                            uint16_t sample = __builtin_bswap16(*ptr++);
-                            r += (sample >> 8) & 0xF8;
-                            g += (sample >> 3) & 0xFC;
-                            b += (sample << 3) & 0xF8;
-                        }
-                    }
-                }
-                presto_obj->led_values[i].r = r;
-                presto_obj->led_values[i].g = g;
-                presto_obj->led_values[i].b = b;
-            }
-        }
 
         presto_obj->presto->wait_for_vsync();
 
         if (presto_obj->exit_core1) break;
 
-        // Note this section calls into code that executes from flash
-        // It's important this is done during vsync to avoid artifacts,
-        // hence the wait for vsync above.
-        if (presto_obj->auto_ambient_leds) {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                const uint32_t r = presto_obj->led_values[i].r;
-                const uint32_t g = presto_obj->led_values[i].g;
-                const uint32_t b = presto_obj->led_values[i].b;
-                presto_obj->ws2812->set_rgb(i, r >> SAMPLE_SHIFT, g >> SAMPLE_SHIFT, b >> SAMPLE_SHIFT);
-                presto_obj->led_values[i].r = (r * 3) >> 2;
-                presto_obj->led_values[i].g = (g * 3) >> 2;
-                presto_obj->led_values[i].b = (b * 3) >> 2;
-            }
-        } else {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                const uint32_t r = presto_obj->led_values[i].r;
-                const uint32_t g = presto_obj->led_values[i].g;
-                const uint32_t b = presto_obj->led_values[i].b;
-                presto_obj->ws2812->set_rgb(i, r, g, b);
-            }
+        for (int i = 0; i < NUM_LEDS; ++i) {
+            const float h = presto_obj->led_values[i].h;
+            const float s = presto_obj->led_values[i].s;
+            const float v = presto_obj->led_values[i].v;
+            presto_obj->ws2812->set_hsv(i, h, s, v);
         }
+
         presto_obj->ws2812->update();
     }
 
@@ -224,7 +174,6 @@ mp_obj_t Presto_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, 
     presto_debug("launch core1\n");
     multicore_reset_core1();
     self->exit_core1 = false;
-    self->auto_ambient_leds = false;
 
     WS2812::RGB* buffer = m_new(WS2812::RGB, NUM_LEDS);
     self->ws2812 = m_new_class(WS2812, NUM_LEDS, pio0, 3, LED_DAT, WS2812::DEFAULT_SERIAL_FREQ, false, WS2812::COLOR_ORDER::GRB, buffer);
@@ -327,39 +276,6 @@ static void cleanup_leds() {
     presto_obj->ws2812 = nullptr;
 }
 
-mp_obj_t Presto_auto_ambient_leds(mp_obj_t self_in, mp_obj_t enable) {
-    _Presto_obj_t *self = MP_OBJ_TO_PTR2(self_in, _Presto_obj_t);
-
-    if(mp_obj_is_true(enable)) {
-        memset(self->led_values, 0, sizeof(self->led_values));
-    }
-
-    self->auto_ambient_leds = mp_obj_is_true(enable);
-
-    return mp_const_none;
-}
-
-mp_obj_t Presto_set_led_rgb(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    enum { ARG_self, ARG_index, ARG_r, ARG_g, ARG_b };
-    static const mp_arg_t allowed_args[] = {
-        { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ },
-        { MP_QSTR_index, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_r, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_g, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_b, MP_ARG_REQUIRED | MP_ARG_INT },
-    };
-
-    // Parse args.
-    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    _Presto_obj_t *self = MP_OBJ_TO_PTR2(args[ARG_self].u_obj, _Presto_obj_t);
-
-    self->led_values[args[ARG_index].u_int] = {(uint32_t)args[ARG_r].u_int, (uint32_t)args[ARG_g].u_int, (uint32_t)args[ARG_b].u_int};
-
-    return mp_const_none;
-}
-
 typedef struct _mp_obj_float_t {
     mp_obj_base_t base;
     mp_float_t value;
@@ -388,21 +304,7 @@ mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     float s = mp_obj_get_float(args[ARG_s].u_obj);
     float v = mp_obj_get_float(args[ARG_v].u_obj);
 
-    float i = floor(h * 6.0f);
-    float f = h * 6.0f - i;
-    v *= 255.0f;
-    uint8_t p = v * (1.0f - s);
-    uint8_t q = v * (1.0f - f * s);
-    uint8_t t = v * (1.0f - (1.0f - f) * s);
-
-    switch (int(i) % 6) {
-      case 0: self->led_values[index] = {(uint8_t)v, (uint8_t)t, (uint8_t)p}; break;
-      case 1: self->led_values[index] = {(uint8_t)q, (uint8_t)v, (uint8_t)p}; break;
-      case 2: self->led_values[index] = {(uint8_t)p, (uint8_t)v, (uint8_t)t}; break;
-      case 3: self->led_values[index] = {(uint8_t)p, (uint8_t)q, (uint8_t)v}; break;
-      case 4: self->led_values[index] = {(uint8_t)t, (uint8_t)p, (uint8_t)v}; break;
-      case 5: self->led_values[index] = {(uint8_t)v, (uint8_t)p, (uint8_t)q}; break;
-    }
+    self->led_values[index] = {h, s, v};
 
     return mp_const_none;
 }

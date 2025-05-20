@@ -29,7 +29,7 @@ class Presto():
     NUM_LEDS = 7
     LED_PIN = 33
 
-    def __init__(self, full_res=False, palette=False, ambient_light=False, direct_to_fb=False, layers=None):
+    def __init__(self, full_res=False, palette=False, direct_to_fb=False, layers=None):
         # WiFi - *must* happen before Presto bringup
         # Note: Forces WiFi details to be in secrets.py
         self.wifi = EzWiFi()
@@ -45,9 +45,6 @@ class Presto():
         self.buffer = None if (full_res and not palette and not direct_to_fb) else memoryview(self.presto)
         self.display = PicoGraphics(DISPLAY_PRESTO_FULL_RES if full_res else DISPLAY_PRESTO, buffer=self.buffer, layers=layers, pen_type=pen)
         self.width, self.height = self.display.get_bounds()
-
-        if ambient_light:
-            self.presto.auto_ambient_leds(True)
 
     @property
     def touch_a(self):
@@ -66,12 +63,6 @@ class Presto():
 
     def set_backlight(self, brightness):
         self.presto.set_backlight(brightness)
-
-    def auto_ambient_leds(self, enable):
-        self.presto.auto_ambient_leds(enable)
-
-    def set_led_rgb(self, i, r, g, b):
-        self.presto.set_led_rgb(i, r, g, b)
 
     def set_led_hsv(self, i, h, s, v):
         self.presto.set_led_hsv(i, h, s, v)
