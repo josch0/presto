@@ -69,7 +69,7 @@ class Presto():
 
     def set_backlight_hsv(self, h, s, v):
         for i in range(7):
-            self.set_led_hsv(i, h, s, v)
+            self.set_backlight_led_hsv(i, h, s, v)
 
     def set_backlight_pulsating(self, fade_time = 0, on_time = 0, off_time = 0, min_value = 0.0):
         self.presto.set_led_pulsating(fade_time, on_time, off_time, min_value)
