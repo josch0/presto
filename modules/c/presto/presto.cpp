@@ -100,13 +100,13 @@ static void __no_inline_not_in_flash_func(update_backlight_leds)() {
                 if (presto_obj->led_pulsating_counter < top) {
                     presto_obj->led_pulsating_counter++;
                 } else {
-                    presto_obj->led_pulsating_counter_direction == LED_COUNTER_DOWN;
+                    presto_obj->led_pulsating_counter_direction = LED_COUNTER_DOWN;
                 }
             } else {
                 if (presto_obj->led_pulsating_counter > bottom) {
                     presto_obj->led_pulsating_counter--;
                 } else {
-                    presto_obj->led_pulsating_counter_direction == LED_COUNTER_UP;
+                    presto_obj->led_pulsating_counter_direction = LED_COUNTER_UP;
                 }
             }
 
