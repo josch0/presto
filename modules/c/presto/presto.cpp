@@ -47,7 +47,7 @@ void presto_debug(const char *fmt, ...) {
 #endif
 
 typedef struct _Presto_led_values_t {
-    uint32_t h, s, v;
+    float h, s, v;
 } _Presto_led_values_t;
 
 /***** Variables Struct *****/
