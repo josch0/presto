@@ -104,7 +104,7 @@ static void __no_inline_not_in_flash_func(update_backlight_leds)() {
                 presto_obj->led_pulsating_counter--;
             }
 
-            b = presto_obj->led_pulsating_counter / presto_obj->led_pulsating.fade_time;
+            b = (float) presto_obj->led_pulsating_counter / (float) presto_obj->led_pulsating.fade_time;
         }
 
         for (int i = 0; i < NUM_LEDS; ++i) {
