@@ -51,7 +51,7 @@ typedef struct _Presto_led_values_t {
 } _Presto_led_values_t;
 
 typedef struct _Presto_led_pulsating_t {
-    uint16_t fade_time = 0, on_time = 0, off_time = 0;
+    int fade_time = 0, on_time = 0, off_time = 0;
 } _Presto_led_pulsating_t;
 
 /***** Variables Struct *****/
@@ -64,7 +64,7 @@ typedef struct _Presto_obj_t {
     volatile bool exit_core1;
 
     WS2812* ws2812;
-    uint16_t led_pulsating_counter = 0;
+    int led_pulsating_counter = 0;
     _Presto_led_values_t led_values[7];
     _Presto_led_pulsating_t led_pulsating;
     _Presto_led_pulsating_t led_pulsating_current;
@@ -91,20 +91,20 @@ static void __no_inline_not_in_flash_func(update_backlight_leds)() {
 
         float b = 1;
         
-        if (presto_obj->led_pulsating->fade_time > 0) {
-            if (presto_obj->led_pulsating_counter == presto_obj->led_pulsating_current->fade_time && presto_obj->led_pulsating_current->fade_time == presto_obj->led_pulsating->fade_time) {
-                presto_obj->led_pulsating_current->fade_time = 0;
-            } else if (presto_obj->led_pulsating_counter == 0 && presto_obj->led_pulsating_current->fade_time == 0) {
-                presto_obj->led_pulsating_current->fade_time = presto_obj->led_pulsating->fade_time;
+        if (presto_obj->led_pulsating.fade_time > 0) {
+            if (presto_obj->led_pulsating_counter == presto_obj->led_pulsating_current.fade_time && presto_obj->led_pulsating_current.fade_time == presto_obj->led_pulsating.fade_time) {
+                presto_obj->led_pulsating_current.fade_time = 0;
+            } else if (presto_obj->led_pulsating_counter == 0 && presto_obj->led_pulsating_current.fade_time == 0) {
+                presto_obj->led_pulsating_current.fade_time = presto_obj->led_pulsating.fade_time;
             } 
             
-            if (presto_obj->led_pulsating_counter < presto_obj->led_pulsating_current->fade_time) {
+            if (presto_obj->led_pulsating_counter < presto_obj->led_pulsating_current.fade_time) {
                 presto_obj->led_pulsating_counter++;
-            } else if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating_current->fade_time) {
+            } else if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating_current.fade_time) {
                 presto_obj->led_pulsating_counter--;
             }
 
-            b = presto_obj->led_pulsating_counter / presto_obj->led_pulsating->fade_time;
+            b = presto_obj->led_pulsating_counter / presto_obj->led_pulsating.fade_time;
         }
 
         for (int i = 0; i < NUM_LEDS; ++i) {
@@ -290,7 +290,7 @@ typedef struct _mp_obj_float_t {
     mp_float_t value;
 } mp_obj_float_t;
 
-const mp_obj_float_t const_float_0 = {{&mp_type_float}, 1.0f};
+const mp_obj_float_t const_float_1 = {{&mp_type_float}, 1.0f};
 
 mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_self, ARG_index, ARG_h, ARG_s, ARG_v };
