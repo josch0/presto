@@ -76,22 +76,7 @@ static _Presto_obj_t *presto_obj;
 
 #define NUM_LEDS 7
 
-// These must be tweaked together
-#define SAMPLE_RANGE 64
-#define LOG2_OF_SAMPLE_RANGE_SQUARED 12
-
-#define SAMPLE_SHIFT (LOG2_OF_SAMPLE_RANGE_SQUARED + 2)
 static void __no_inline_not_in_flash_func(update_backlight_leds)() {
-    const Point led_sample_locations[NUM_LEDS] = {
-        { presto_obj->width - SAMPLE_RANGE, presto_obj->height - SAMPLE_RANGE },
-        { presto_obj->width - SAMPLE_RANGE, (presto_obj->height - SAMPLE_RANGE)/2 },
-        { presto_obj->width - SAMPLE_RANGE, 0 },
-        { (presto_obj->width - SAMPLE_RANGE)/2, 0 },
-        { 0, 0 },
-        { 0, (presto_obj->height - SAMPLE_RANGE)/2 },
-        { 0, presto_obj->height - SAMPLE_RANGE }
-    };
-
     while (!presto_obj->exit_core1) {
 
         presto_obj->presto->wait_for_vsync();
