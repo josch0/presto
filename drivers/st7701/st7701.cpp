@@ -401,7 +401,7 @@ void ST7701::start_frame_xfer()
     if(lcd_bl != PIN_UNUSED) {
       pwm_config cfg = pwm_get_default_config();
       // PWM frequency for CTRL-Pin on AP3031 must be below 1000 Hz for seamless dimming between 0% and 100%
-      pwm_config_set_clkdiv_int(&cfg, 20);
+      pwm_config_set_clkdiv_int(&cfg, 10);
       pwm_init(pwm_gpio_to_slice_num(lcd_bl), &cfg, true);
       gpio_set_function(lcd_bl, GPIO_FUNC_PWM);
       set_backlight(0); // Turn backlight off initially to avoid nasty surprises

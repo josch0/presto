@@ -61,13 +61,17 @@ class Presto():
     async def async_connect(self):
         await self.wifi.connect()
 
-    def set_backlight(self, brightness):
+    def set_display_brightness(self, brightness):
         self.presto.set_backlight(brightness)
 
-    def set_led_hsv(self, i, h, s, v):
+    def set_backlight_led_hsv(self, i, h, s, v):
         self.presto.set_led_hsv(i, h, s, v)
 
-    def set_led_pulsating(self, fade_time, on_time = 0, off_time = 0, min_value = 0.0):
+    def set_backlight_hsv(self, h, s, v):
+        for i in range(7):
+            self.set_led_hsv(i, h, s, v)
+
+    def set_backlight_pulsating(self, fade_time = 0, on_time = 0, off_time = 0, min_value = 0.0):
         self.presto.set_led_pulsating(fade_time, on_time, off_time, min_value)
 
     def connect(self, ssid=None, password=None):
