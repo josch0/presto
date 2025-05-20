@@ -9,6 +9,7 @@ MP_DEFINE_CONST_FUN_OBJ_KW(Presto_partial_update_obj, 5, Presto_partial_update);
 MP_DEFINE_CONST_FUN_OBJ_2(Presto_set_backlight_obj, Presto_set_backlight);
 
 MP_DEFINE_CONST_FUN_OBJ_KW(Presto_set_led_hsv_obj, 3, Presto_set_led_hsv);
+MP_DEFINE_CONST_FUN_OBJ_KW(Presto_set_led_pulsating_obj, 3, Presto_set_led_pulsating);
 
 /***** Binding of Methods *****/
 
@@ -18,6 +19,7 @@ static const mp_rom_map_elem_t Presto_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_partial_update), MP_ROM_PTR(&Presto_partial_update_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_backlight), MP_ROM_PTR(&Presto_set_backlight_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_led_hsv), MP_ROM_PTR(&Presto_set_led_hsv_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_led_pulsating), MP_ROM_PTR(&Presto_set_led_pulsating_obj) },
 
     { MP_ROM_QSTR(MP_QSTR_WIDTH), MP_ROM_INT(WIDTH/2) },
     { MP_ROM_QSTR(MP_QSTR_HEIGHT), MP_ROM_INT(HEIGHT/2) },

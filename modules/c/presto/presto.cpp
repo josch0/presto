@@ -50,6 +50,10 @@ typedef struct _Presto_led_values_t {
     float h, s, v;
 } _Presto_led_values_t;
 
+typedef struct _Presto_led_pulsating_t {
+    uint16_t fade_time = 0, on_time = 0, off_time = 0;
+} _Presto_led_pulsating_t;
+
 /***** Variables Struct *****/
 typedef struct _Presto_obj_t {
     mp_obj_base_t base;
@@ -60,7 +64,10 @@ typedef struct _Presto_obj_t {
     volatile bool exit_core1;
 
     WS2812* ws2812;
+    uint16_t led_pulsating_counter = 0;
     _Presto_led_values_t led_values[7];
+    _Presto_led_pulsating_t led_pulsating;
+    _Presto_led_pulsating_t led_pulsating_current;
 } _Presto_obj_t;
 
 typedef struct _ModPicoGraphics_obj_t {
@@ -78,16 +85,33 @@ static _Presto_obj_t *presto_obj;
 
 static void __no_inline_not_in_flash_func(update_backlight_leds)() {
     while (!presto_obj->exit_core1) {
-
         presto_obj->presto->wait_for_vsync();
 
         if (presto_obj->exit_core1) break;
+
+        float b = 1;
+        
+        if (presto_obj->led_pulsating->fade_time > 0) {
+            if (presto_obj->led_pulsating_counter == presto_obj->led_pulsating_current->fade_time && presto_obj->led_pulsating_current->fade_time == presto_obj->led_pulsating->fade_time) {
+                presto_obj->led_pulsating_current->fade_time = 0;
+            } else if (presto_obj->led_pulsating_counter == 0 && presto_obj->led_pulsating_current->fade_time == 0) {
+                presto_obj->led_pulsating_current->fade_time = presto_obj->led_pulsating->fade_time;
+            } 
+            
+            if (presto_obj->led_pulsating_counter < presto_obj->led_pulsating_current->fade_time) {
+                presto_obj->led_pulsating_counter++;
+            } else if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating_current->fade_time) {
+                presto_obj->led_pulsating_counter--;
+            }
+
+            b = presto_obj->led_pulsating_counter / presto_obj->led_pulsating->fade_time;
+        }
 
         for (int i = 0; i < NUM_LEDS; ++i) {
             const float h = presto_obj->led_values[i].h;
             const float s = presto_obj->led_values[i].s;
             const float v = presto_obj->led_values[i].v;
-            presto_obj->ws2812->set_hsv(i, h, s, v);
+            presto_obj->ws2812->set_hsv(i, h, s, v * b);
         }
 
         presto_obj->ws2812->update();
@@ -266,7 +290,7 @@ typedef struct _mp_obj_float_t {
     mp_float_t value;
 } mp_obj_float_t;
 
-const mp_obj_float_t const_float_1 = {{&mp_type_float}, 1.0f};
+const mp_obj_float_t const_float_0 = {{&mp_type_float}, 1.0f};
 
 mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum { ARG_self, ARG_index, ARG_h, ARG_s, ARG_v };
@@ -290,6 +314,32 @@ mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     float v = mp_obj_get_float(args[ARG_v].u_obj);
 
     self->led_values[index] = {h, s, v};
+
+    return mp_const_none;
+}
+
+mp_obj_t Presto_set_led_pulsating(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    enum { ARG_self, ARG_fade_time, ARG_on_time, ARG_off_time };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ },
+        { MP_QSTR_fade_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_on_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_off_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+    };
+
+    // Parse args.
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    _Presto_obj_t *self = MP_OBJ_TO_PTR2(args[ARG_self].u_obj, _Presto_obj_t);
+
+    int fade_time = args[ARG_fade_time].u_int;
+    int on_time = args[ARG_on_time].u_int;
+    int off_time = args[ARG_off_time].u_int;
+
+    self->led_pulsating = {fade_time, on_time, off_time};
+    self->led_pulsating_current = {0, 0, 0};
+    self->led_pulsating_counter = 0;
 
     return mp_const_none;
 }
