@@ -52,6 +52,7 @@ typedef struct _Presto_led_values_t {
 
 typedef struct _Presto_led_pulsating_t {
     int fade_time = 0, on_time = 0, off_time = 0;
+    float min_value = 0.0f;
 } _Presto_led_pulsating_t;
 
 /***** Variables Struct *****/
@@ -65,9 +66,9 @@ typedef struct _Presto_obj_t {
 
     WS2812* ws2812;
     int led_pulsating_counter = 0;
+    uint led_pulsating_counter_direction = LED_COUNTER_UP;
     _Presto_led_values_t led_values[7];
     _Presto_led_pulsating_t led_pulsating;
-    _Presto_led_pulsating_t led_pulsating_current;
 } _Presto_obj_t;
 
 typedef struct _ModPicoGraphics_obj_t {
@@ -89,22 +90,34 @@ static void __no_inline_not_in_flash_func(update_backlight_leds)() {
 
         if (presto_obj->exit_core1) break;
 
-        float b = 1;
+        float b = 1.0f;
         
-        if (presto_obj->led_pulsating.fade_time > 0) {
-            if (presto_obj->led_pulsating_counter == presto_obj->led_pulsating_current.fade_time && presto_obj->led_pulsating_current.fade_time == presto_obj->led_pulsating.fade_time) {
-                presto_obj->led_pulsating_current.fade_time = 0;
-            } else if (presto_obj->led_pulsating_counter == 0 && presto_obj->led_pulsating_current.fade_time == 0) {
-                presto_obj->led_pulsating_current.fade_time = presto_obj->led_pulsating.fade_time;
-            } 
+        if (presto_obj->led_pulsating.fade_time > 0 || presto_obj->led_pulsating.on_time > 0 || presto_obj->led_pulsating.off_time > 0) {
+            const int top = presto_obj->led_pulsating.fade_time + presto_obj->led_pulsating.on_time;
+            const int bottom = -presto_obj->led_pulsating.off_time;
             
-            if (presto_obj->led_pulsating_counter < presto_obj->led_pulsating_current.fade_time) {
-                presto_obj->led_pulsating_counter++;
-            } else if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating_current.fade_time) {
-                presto_obj->led_pulsating_counter--;
+            if (presto_obj->led_pulsating_counter_direction == LED_COUNTER_UP) {
+                if (presto_obj->led_pulsating_counter < top) {
+                    presto_obj->led_pulsating_counter++;
+                } else {
+                    presto_obj->led_pulsating_counter_direction == LED_COUNTER_DOWN;
+                }
+            } else {
+                if (presto_obj->led_pulsating_counter > bottom) {
+                    presto_obj->led_pulsating_counter--;
+                } else {
+                    presto_obj->led_pulsating_counter_direction == LED_COUNTER_UP;
+                }
             }
 
-            b = (float) presto_obj->led_pulsating_counter / (float) presto_obj->led_pulsating.fade_time;
+            if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating.fade_time) {
+                b = 1.0f;
+            } else if (presto_obj->led_pulsating_counter < 0) {
+                b = presto_obj->led_pulsating.min_value;
+            } else {
+                const float range = 1.0f - presto_obj->led_pulsating.min_value;
+                b = (((float) presto_obj->led_pulsating_counter / (float) presto_obj->led_pulsating.fade_time) * range) + presto_obj->led_pulsating.min_value;
+            }
         }
 
         for (int i = 0; i < NUM_LEDS; ++i) {
@@ -319,12 +332,13 @@ mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
 }
 
 mp_obj_t Presto_set_led_pulsating(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    enum { ARG_self, ARG_fade_time, ARG_on_time, ARG_off_time };
+    enum { ARG_self, ARG_fade_time, ARG_on_time, ARG_off_time, ARG_min_value};
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ },
         { MP_QSTR_fade_time, MP_ARG_REQUIRED | MP_ARG_INT },        
         { MP_QSTR_on_time, MP_ARG_REQUIRED | MP_ARG_INT },        
         { MP_QSTR_off_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_min_value, MP_ARG_REQUIRED | MP_ARG_OBJ },
     };
 
     // Parse args.
@@ -333,13 +347,14 @@ mp_obj_t Presto_set_led_pulsating(size_t n_args, const mp_obj_t *pos_args, mp_ma
 
     _Presto_obj_t *self = MP_OBJ_TO_PTR2(args[ARG_self].u_obj, _Presto_obj_t);
 
-    int fade_time = args[ARG_fade_time].u_int;
-    int on_time = args[ARG_on_time].u_int;
-    int off_time = args[ARG_off_time].u_int;
+    const int fade_time = args[ARG_fade_time].u_int;
+    const int on_time = args[ARG_on_time].u_int;
+    const int off_time = args[ARG_off_time].u_int;
+    const float min_value = mp_obj_get_float(args[ARG_min_value].u_obj);
 
-    self->led_pulsating = {fade_time, on_time, off_time};
-    self->led_pulsating_current = {0, 0, 0};
+    self->led_pulsating = {fade_time, on_time, off_time, min_value};
     self->led_pulsating_counter = 0;
+    self->led_pulsating_counter_direction = LED_COUNTER_UP;
 
     return mp_const_none;
 }

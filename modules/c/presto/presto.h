@@ -13,6 +13,9 @@ static const uint LCD_DC = -1;
 static const uint LCD_D0 = 1;
 static const uint LED_DAT = 33;
 
+static const uint LED_COUNTER_UP = 1;
+static const uint LED_COUNTER_DOWN = 2;
+
 /***** Extern of Class Definition *****/
 extern const mp_obj_type_t Presto_type;
 

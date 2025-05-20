@@ -67,8 +67,8 @@ class Presto():
     def set_led_hsv(self, i, h, s, v):
         self.presto.set_led_hsv(i, h, s, v)
 
-    def set_led_pulsating(self, fade_time, on_time = 0, off_time = 0):
-        self.presto.set_led_pulsating(fade_time, on_time, off_time)
+    def set_led_pulsating(self, fade_time, on_time = 0, off_time = 0, min_value = 0.0):
+        self.presto.set_led_pulsating(fade_time, on_time, off_time, min_value)
 
     def connect(self, ssid=None, password=None):
         return asyncio.get_event_loop().run_until_complete(self.wifi.connect(ssid, password))
