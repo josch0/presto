@@ -47,8 +47,13 @@ void presto_debug(const char *fmt, ...) {
 #endif
 
 typedef struct _Presto_led_values_t {
-    uint32_t r, g, b;
+    float h, s, v;
 } _Presto_led_values_t;
+
+typedef struct _Presto_led_pulsating_t {
+    int fade_time = 0, on_time = 0, off_time = 0;
+    float min_value = 0.0f;
+} _Presto_led_pulsating_t;
 
 /***** Variables Struct *****/
 typedef struct _Presto_obj_t {
@@ -59,10 +64,11 @@ typedef struct _Presto_obj_t {
     bool using_palette;
     volatile bool exit_core1;
 
-    // Automatic ambient backlight control
-    volatile bool auto_ambient_leds;
     WS2812* ws2812;
+    int led_pulsating_counter = 0;
+    uint led_pulsating_counter_direction = LED_COUNTER_UP;
     _Presto_led_values_t led_values[7];
+    _Presto_led_pulsating_t led_pulsating;
 } _Presto_obj_t;
 
 typedef struct _ModPicoGraphics_obj_t {
@@ -78,83 +84,49 @@ static _Presto_obj_t *presto_obj;
 
 #define NUM_LEDS 7
 
-// These must be tweaked together
-#define SAMPLE_RANGE 64
-#define LOG2_OF_SAMPLE_RANGE_SQUARED 12
-
-#define SAMPLE_SHIFT (LOG2_OF_SAMPLE_RANGE_SQUARED + 2)
 static void __no_inline_not_in_flash_func(update_backlight_leds)() {
-    const Point led_sample_locations[NUM_LEDS] = {
-        { presto_obj->width - SAMPLE_RANGE, presto_obj->height - SAMPLE_RANGE },
-        { presto_obj->width - SAMPLE_RANGE, (presto_obj->height - SAMPLE_RANGE)/2 },
-        { presto_obj->width - SAMPLE_RANGE, 0 },
-        { (presto_obj->width - SAMPLE_RANGE)/2, 0 },
-        { 0, 0 },
-        { 0, (presto_obj->height - SAMPLE_RANGE)/2 },
-        { 0, presto_obj->height - SAMPLE_RANGE }
-    };
-
     while (!presto_obj->exit_core1) {
-        if (presto_obj->auto_ambient_leds) {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                uint32_t r = presto_obj->led_values[i].r;
-                uint32_t g = presto_obj->led_values[i].g;
-                uint32_t b = presto_obj->led_values[i].b;
-
-                if (presto_obj->using_palette) {
-                    for (int y = 0; y < SAMPLE_RANGE; ++y) {
-                        uint8_t* ptr = (uint8_t*)presto_buffer;
-                        ptr += (led_sample_locations[i].y + y) * presto_obj->width + led_sample_locations[i].x;
-                        for (int x = 0; x < SAMPLE_RANGE; ++x) {
-                            uint16_t sample = presto_obj->presto->get_encoded_palette_entry(*ptr++) >> 16;
-                            r += (sample >> 8) & 0xF8;
-                            g += (sample >> 3) & 0xFC;
-                            b += (sample << 3) & 0xF8;
-                        }
-                    }
-                }
-                else {
-                    for (int y = 0; y < SAMPLE_RANGE; ++y) {
-                        uint16_t* ptr = &presto_buffer[(led_sample_locations[i].y + y) * presto_obj->width + led_sample_locations[i].x];
-                        for (int x = 0; x < SAMPLE_RANGE; ++x) {
-                            uint16_t sample = __builtin_bswap16(*ptr++);
-                            r += (sample >> 8) & 0xF8;
-                            g += (sample >> 3) & 0xFC;
-                            b += (sample << 3) & 0xF8;
-                        }
-                    }
-                }
-                presto_obj->led_values[i].r = r;
-                presto_obj->led_values[i].g = g;
-                presto_obj->led_values[i].b = b;
-            }
-        }
-
         presto_obj->presto->wait_for_vsync();
 
         if (presto_obj->exit_core1) break;
 
-        // Note this section calls into code that executes from flash
-        // It's important this is done during vsync to avoid artifacts,
-        // hence the wait for vsync above.
-        if (presto_obj->auto_ambient_leds) {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                const uint32_t r = presto_obj->led_values[i].r;
-                const uint32_t g = presto_obj->led_values[i].g;
-                const uint32_t b = presto_obj->led_values[i].b;
-                presto_obj->ws2812->set_rgb(i, r >> SAMPLE_SHIFT, g >> SAMPLE_SHIFT, b >> SAMPLE_SHIFT);
-                presto_obj->led_values[i].r = (r * 3) >> 2;
-                presto_obj->led_values[i].g = (g * 3) >> 2;
-                presto_obj->led_values[i].b = (b * 3) >> 2;
+        float b = 1.0f;
+        
+        if (presto_obj->led_pulsating.fade_time > 0 || presto_obj->led_pulsating.on_time > 0 || presto_obj->led_pulsating.off_time > 0) {
+            const int top = presto_obj->led_pulsating.fade_time + presto_obj->led_pulsating.on_time;
+            const int bottom = -presto_obj->led_pulsating.off_time;
+            
+            if (presto_obj->led_pulsating_counter_direction == LED_COUNTER_UP) {
+                if (presto_obj->led_pulsating_counter < top) {
+                    presto_obj->led_pulsating_counter++;
+                } else {
+                    presto_obj->led_pulsating_counter_direction = LED_COUNTER_DOWN;
+                }
+            } else {
+                if (presto_obj->led_pulsating_counter > bottom) {
+                    presto_obj->led_pulsating_counter--;
+                } else {
+                    presto_obj->led_pulsating_counter_direction = LED_COUNTER_UP;
+                }
             }
-        } else {
-            for (int i = 0; i < NUM_LEDS; ++i) {
-                const uint32_t r = presto_obj->led_values[i].r;
-                const uint32_t g = presto_obj->led_values[i].g;
-                const uint32_t b = presto_obj->led_values[i].b;
-                presto_obj->ws2812->set_rgb(i, r, g, b);
+
+            if (presto_obj->led_pulsating_counter > presto_obj->led_pulsating.fade_time) {
+                b = 1.0f;
+            } else if (presto_obj->led_pulsating_counter < 0) {
+                b = presto_obj->led_pulsating.min_value;
+            } else {
+                const float range = 1.0f - presto_obj->led_pulsating.min_value;
+                b = (((float) presto_obj->led_pulsating_counter / (float) presto_obj->led_pulsating.fade_time) * range) + presto_obj->led_pulsating.min_value;
             }
         }
+
+        for (int i = 0; i < NUM_LEDS; ++i) {
+            const float h = presto_obj->led_values[i].h;
+            const float s = presto_obj->led_values[i].s;
+            const float v = presto_obj->led_values[i].v;
+            presto_obj->ws2812->set_hsv(i, h, s, v * b);
+        }
+
         presto_obj->ws2812->update();
     }
 
@@ -224,7 +196,6 @@ mp_obj_t Presto_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, 
     presto_debug("launch core1\n");
     multicore_reset_core1();
     self->exit_core1 = false;
-    self->auto_ambient_leds = false;
 
     WS2812::RGB* buffer = m_new(WS2812::RGB, NUM_LEDS);
     self->ws2812 = m_new_class(WS2812, NUM_LEDS, pio0, 3, LED_DAT, WS2812::DEFAULT_SERIAL_FREQ, false, WS2812::COLOR_ORDER::GRB, buffer);
@@ -327,39 +298,6 @@ static void cleanup_leds() {
     presto_obj->ws2812 = nullptr;
 }
 
-mp_obj_t Presto_auto_ambient_leds(mp_obj_t self_in, mp_obj_t enable) {
-    _Presto_obj_t *self = MP_OBJ_TO_PTR2(self_in, _Presto_obj_t);
-
-    if(mp_obj_is_true(enable)) {
-        memset(self->led_values, 0, sizeof(self->led_values));
-    }
-
-    self->auto_ambient_leds = mp_obj_is_true(enable);
-
-    return mp_const_none;
-}
-
-mp_obj_t Presto_set_led_rgb(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    enum { ARG_self, ARG_index, ARG_r, ARG_g, ARG_b };
-    static const mp_arg_t allowed_args[] = {
-        { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ },
-        { MP_QSTR_index, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_r, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_g, MP_ARG_REQUIRED | MP_ARG_INT },
-        { MP_QSTR_b, MP_ARG_REQUIRED | MP_ARG_INT },
-    };
-
-    // Parse args.
-    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    _Presto_obj_t *self = MP_OBJ_TO_PTR2(args[ARG_self].u_obj, _Presto_obj_t);
-
-    self->led_values[args[ARG_index].u_int] = {(uint32_t)args[ARG_r].u_int, (uint32_t)args[ARG_g].u_int, (uint32_t)args[ARG_b].u_int};
-
-    return mp_const_none;
-}
-
 typedef struct _mp_obj_float_t {
     mp_obj_base_t base;
     mp_float_t value;
@@ -388,21 +326,35 @@ mp_obj_t Presto_set_led_hsv(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     float s = mp_obj_get_float(args[ARG_s].u_obj);
     float v = mp_obj_get_float(args[ARG_v].u_obj);
 
-    float i = floor(h * 6.0f);
-    float f = h * 6.0f - i;
-    v *= 255.0f;
-    uint8_t p = v * (1.0f - s);
-    uint8_t q = v * (1.0f - f * s);
-    uint8_t t = v * (1.0f - (1.0f - f) * s);
+    self->led_values[index] = {h, s, v};
 
-    switch (int(i) % 6) {
-      case 0: self->led_values[index] = {(uint8_t)v, (uint8_t)t, (uint8_t)p}; break;
-      case 1: self->led_values[index] = {(uint8_t)q, (uint8_t)v, (uint8_t)p}; break;
-      case 2: self->led_values[index] = {(uint8_t)p, (uint8_t)v, (uint8_t)t}; break;
-      case 3: self->led_values[index] = {(uint8_t)p, (uint8_t)q, (uint8_t)v}; break;
-      case 4: self->led_values[index] = {(uint8_t)t, (uint8_t)p, (uint8_t)v}; break;
-      case 5: self->led_values[index] = {(uint8_t)v, (uint8_t)p, (uint8_t)q}; break;
-    }
+    return mp_const_none;
+}
+
+mp_obj_t Presto_set_led_pulsating(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    enum { ARG_self, ARG_fade_time, ARG_on_time, ARG_off_time, ARG_min_value};
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ },
+        { MP_QSTR_fade_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_on_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_off_time, MP_ARG_REQUIRED | MP_ARG_INT },        
+        { MP_QSTR_min_value, MP_ARG_REQUIRED | MP_ARG_OBJ },
+    };
+
+    // Parse args.
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    _Presto_obj_t *self = MP_OBJ_TO_PTR2(args[ARG_self].u_obj, _Presto_obj_t);
+
+    const int fade_time = args[ARG_fade_time].u_int;
+    const int on_time = args[ARG_on_time].u_int;
+    const int off_time = args[ARG_off_time].u_int;
+    const float min_value = mp_obj_get_float(args[ARG_min_value].u_obj);
+
+    self->led_pulsating = {fade_time, on_time, off_time, min_value};
+    self->led_pulsating_counter = 0;
+    self->led_pulsating_counter_direction = LED_COUNTER_UP;
 
     return mp_const_none;
 }

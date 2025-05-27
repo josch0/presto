@@ -29,7 +29,7 @@ class Presto():
     NUM_LEDS = 7
     LED_PIN = 33
 
-    def __init__(self, full_res=False, palette=False, ambient_light=False, direct_to_fb=False, layers=None):
+    def __init__(self, full_res=False, palette=False, direct_to_fb=False, layers=None):
         # WiFi - *must* happen before Presto bringup
         # Note: Forces WiFi details to be in secrets.py
         self.wifi = EzWiFi()
@@ -46,9 +46,6 @@ class Presto():
         self.display = PicoGraphics(DISPLAY_PRESTO_FULL_RES if full_res else DISPLAY_PRESTO, buffer=self.buffer, layers=layers, pen_type=pen)
         self.width, self.height = self.display.get_bounds()
 
-        if ambient_light:
-            self.presto.auto_ambient_leds(True)
-
     @property
     def touch_a(self):
         return Touch(self.touch.x, self.touch.y, self.touch.state)
@@ -64,17 +61,18 @@ class Presto():
     async def async_connect(self):
         await self.wifi.connect()
 
-    def set_backlight(self, brightness):
+    def set_display_brightness(self, brightness):
         self.presto.set_backlight(brightness)
 
-    def auto_ambient_leds(self, enable):
-        self.presto.auto_ambient_leds(enable)
-
-    def set_led_rgb(self, i, r, g, b):
-        self.presto.set_led_rgb(i, r, g, b)
-
-    def set_led_hsv(self, i, h, s, v):
+    def set_backlight_led_hsv(self, i, h, s, v):
         self.presto.set_led_hsv(i, h, s, v)
+
+    def set_backlight_hsv(self, h, s, v):
+        for i in range(7):
+            self.set_backlight_led_hsv(i, h, s, v)
+
+    def set_backlight_pulsating(self, fade_time = 0, on_time = 0, off_time = 0, min_value = 0.0):
+        self.presto.set_led_pulsating(fade_time, on_time, off_time, min_value)
 
     def connect(self, ssid=None, password=None):
         return asyncio.get_event_loop().run_until_complete(self.wifi.connect(ssid, password))
